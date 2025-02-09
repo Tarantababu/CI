@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 from datetime import datetime
+import os
 
 # Custom CSS for modern design
 st.markdown(
@@ -55,27 +56,31 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Database file path
+DB_FILE = "german_videos.db"
+
 # Initialize the database
 def init_db():
-    conn = sqlite3.connect('german_videos.db')
-    c = conn.cursor()
-    
-    # Create tables if they don't exist
-    c.execute('''CREATE TABLE IF NOT EXISTS videos
-                 (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS user_progress
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS user_targets
-                 (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
-    
-    conn.commit()
-    conn.close()
+    if not os.path.exists(DB_FILE):
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        
+        # Create tables if they don't exist
+        c.execute('''CREATE TABLE IF NOT EXISTS videos
+                     (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS user_progress
+                     (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS user_targets
+                     (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
+        
+        conn.commit()
+        conn.close()
 
 # Fetch videos from the database
 def fetch_videos():
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT * FROM videos")
     videos = c.fetchall()
@@ -84,7 +89,7 @@ def fetch_videos():
 
 # Add a new video to the database
 def add_video(title, level, url, tags):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO videos (title, level, url, tags, added_date) VALUES (?, ?, ?, ?, ?)",
               (title, level, url, tags, datetime.now().date()))
@@ -93,7 +98,7 @@ def add_video(title, level, url, tags):
 
 # Fetch user progress from the database
 def fetch_user_progress(user_id):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ?",
               (user_id,))
@@ -103,7 +108,7 @@ def fetch_user_progress(user_id):
 
 # Fetch daily target from the database
 def fetch_daily_target(user_id):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT target_minutes FROM user_targets WHERE user_id = ? ORDER BY set_date DESC LIMIT 1",
               (user_id,))
@@ -113,7 +118,7 @@ def fetch_daily_target(user_id):
 
 # Set daily target for a user
 def set_daily_target(user_id, target_minutes):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO user_targets (user_id, target_minutes, set_date) VALUES (?, ?, ?)",
               (user_id, target_minutes, datetime.now().date()))
@@ -122,7 +127,7 @@ def set_daily_target(user_id, target_minutes):
 
 # Update minutes spent
 def update_minutes_spent(user_id, minutes_spent):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
               (user_id, 0, datetime.now().date(), minutes_spent))
@@ -131,7 +136,7 @@ def update_minutes_spent(user_id, minutes_spent):
 
 # Fetch calendar data
 def fetch_calendar_data(user_id):
-    conn = sqlite3.connect('german_videos.db')
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT watched_date, SUM(duration) FROM user_progress WHERE user_id = ? GROUP BY watched_date",
               (user_id,))
@@ -280,7 +285,7 @@ def main():
             st.write(f"**Tags:** {video[4]}")   # Tags
             st.write(f"**Added on:** {video[5]}")  # Added Date
             if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
-                conn = sqlite3.connect('german_videos.db')
+                conn = sqlite3.connect(DB_FILE)
                 c = conn.cursor()
                 c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
                           (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
