@@ -1,127 +1,113 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 import sqlite3
-import hashlib
-import datetime
-import re
 
-# Initialize database
-def init_db():
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    
-    # Create users table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            is_admin BOOLEAN DEFAULT FALSE,
-            daily_target INTEGER DEFAULT 30
-        )
-    ''')
-    
-    # Create videos table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS videos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            youtube_id TEXT NOT NULL,
-            level TEXT NOT NULL,
-            tags TEXT,
-            duration INTEGER NOT NULL,
-            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Create watch_history table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS watch_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            video_id INTEGER,
-            watched_date DATE,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (video_id) REFERENCES videos (id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+# Database setup
+conn = sqlite3.connect('german_videos.db')
+c = conn.cursor()
 
-# Security functions
-def hash_password(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+# Create tables if they don't exist
+c.execute('''CREATE TABLE IF NOT EXISTS videos
+             (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
 
-def check_password(password, hashed_password):
-    return hash_password(password) == hashed_password
+c.execute('''CREATE TABLE IF NOT EXISTS user_progress
+             (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
 
-# Extract YouTube ID
-def extract_youtube_id(url):
-    pattern = r'(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)/|.*[?&]v=)|youtu\.be/)([^"&?/\s]{11})'
-    match = re.search(pattern, url)
-    return match.group(1) if match else None
+c.execute('''CREATE TABLE IF NOT EXISTS user_targets
+             (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
 
-# User Service class
-class UserService:
-    def create_user(username, password, is_admin=False):
-        conn = sqlite3.connect('german_learning.db')
-        c = conn.cursor()
-        try:
-            c.execute(
-                "INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-                (username, hash_password(password), is_admin)
-            )
+conn.commit()
+
+# Streamlit app
+st.title("German Learning Videos")
+
+# Sidebar for admin to add videos
+st.sidebar.header("Admin Panel")
+st.sidebar.subheader("Add New Video")
+
+title = st.sidebar.text_input("Title")
+level = st.sidebar.selectbox("Level", ["Beginner", "Intermediate", "Advanced"])
+url = st.sidebar.text_input("YouTube URL")
+tags = st.sidebar.text_input("Tags (comma separated)")
+add_button = st.sidebar.button("Add Video")
+
+if add_button:
+    if title and level and url:
+        c.execute("INSERT INTO videos (title, level, url, tags, added_date) VALUES (?, ?, ?, ?, ?)",
+                  (title, level, url, tags, datetime.now().date()))
+        conn.commit()
+        st.sidebar.success("Video added successfully!")
+    else:
+        st.sidebar.error("Please fill in all fields.")
+
+# Main content
+st.header("Browse Videos")
+
+# Filter videos by level and tags
+levels = ["Beginner", "Intermediate", "Advanced"]
+selected_level = st.selectbox("Select Level", levels)
+selected_tags = st.text_input("Filter by Tags (comma separated)")
+
+query = "SELECT * FROM videos WHERE level = ?"
+params = [selected_level]
+
+if selected_tags:
+    tags_list = [tag.strip() for tag in selected_tags.split(",")]
+    query += " AND ("
+    for i, tag in enumerate(tags_list):
+        query += "tags LIKE ?"
+        params.append(f"%{tag}%")
+        if i < len(tags_list) - 1:
+            query += " OR "
+    query += ")"
+
+videos = c.execute(query, params).fetchall()
+
+if videos:
+    for video in videos:
+        st.subheader(video[1])
+        st.video(video[3])
+        st.write(f"Level: {video[2]}")
+        st.write(f"Tags: {video[4]}")
+        st.write(f"Added on: {video[5]}")
+        if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
+            c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
+                      (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
             conn.commit()
-            conn.close()
-            return True
-        except sqlite3.IntegrityError:
-            conn.close()
-            return False
+            st.success("Video marked as watched!")
+else:
+    st.write("No videos found for the selected filters.")
 
-    def verify_user(username, password):
-        conn = sqlite3.connect('german_learning.db')
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE username=?", (username,))
-        user = c.fetchone()
-        conn.close()
-        if user and check_password(password, user[2]):
-            return user
-        return None
+# User progress tracking
+st.header("Your Progress")
 
-# Streamlit UI
-def main():
-    st.set_page_config(page_title="German Learning Platform", layout="wide")
-    init_db()
-    
-    if 'user' not in st.session_state:
-        st.session_state.user = None
-    
-    # Login/Register UI
-    if not st.session_state.user:
-        tab1, tab2 = st.tabs(["Login", "Register"])
-        
-        with tab1:
-            st.header("Login")
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            if st.button("Login"):
-                user = UserService.verify_user(username, password)
-                if user:
-                    st.session_state.user = user
-                    st.experimental_rerun()
-                else:
-                    st.error("Invalid username or password")
-        
-        with tab2:
-            st.header("Register")
-            new_username = st.text_input("Username", key="register_username")
-            new_password = st.text_input("Password", type="password", key="register_password")
-            if st.button("Register"):
-                if UserService.create_user(new_username, new_password):
-                    st.success("Registration successful! Please login.")
-                else:
-                    st.error("Username already exists")
-    
-if __name__ == "__main__":
-    main()
+# Set daily target
+st.subheader("Set Daily Target")
+target_minutes = st.number_input("Enter your daily target in minutes", min_value=1, value=30)
+set_target_button = st.button("Set Target")
+
+if set_target_button:
+    c.execute("INSERT INTO user_targets (user_id, target_minutes, set_date) VALUES (?, ?, ?)",
+              (1, target_minutes, datetime.now().date()))
+    conn.commit()
+    st.success("Daily target set successfully!")
+
+# Display progress
+st.subheader("Daily Consumption")
+progress = c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ? AND watched_date = ?",
+                     (1, datetime.now().date())).fetchone()[0] or 0
+st.write(f"Total minutes watched today: {progress}")
+
+target = c.execute("SELECT target_minutes FROM user_targets WHERE user_id = ? ORDER BY set_date DESC LIMIT 1",
+                   (1,)).fetchone()
+if target:
+    target_minutes = target[0]
+    st.write(f"Daily target: {target_minutes} minutes")
+    if progress >= target_minutes:
+        st.success("You've reached your daily target!")
+    else:
+        st.warning(f"You need to watch {target_minutes - progress} more minutes to reach your target.")
+
+# Close the database connection
+conn.close()
