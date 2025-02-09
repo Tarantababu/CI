@@ -51,6 +51,18 @@ st.markdown(
         background-color: #4CAF50;
         color: white;
     }
+    .video-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-top: 20px;
+    }
+    .video-card {
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #f0f2f6;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -142,6 +154,15 @@ def fetch_calendar_data(user_id):
     calendar_data = c.fetchall()
     conn.close()
     return calendar_data
+
+# Reset user progress
+def reset_user_progress(user_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM user_progress WHERE user_id = ?", (user_id,))
+    c.execute("DELETE FROM user_targets WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
 # Progress Page
 def progress_page():
@@ -260,6 +281,15 @@ def admin_panel():
     if set_target_button:
         set_daily_target(user_id, target_minutes)
         st.sidebar.success("Daily target set successfully!")
+    
+    # Reset Progress Section
+    st.sidebar.subheader("Reset User Progress")
+    reset_user_id = st.sidebar.number_input("User ID to Reset", min_value=1, value=1)
+    reset_button = st.sidebar.button("Reset Progress")
+    
+    if reset_button:
+        reset_user_progress(reset_user_id)
+        st.sidebar.success(f"Progress for User {reset_user_id} has been reset.")
 
 # Main App
 def main():
@@ -277,20 +307,27 @@ def main():
     if page == "Dashboard":
         st.title("German Learning Videos")
         videos = fetch_videos()
-        for video in videos:
-            st.subheader(video[1])  # Title
-            st.video(video[3])      # YouTube URL
-            st.write(f"**Level:** {video[2]}")  # Level
-            st.write(f"**Tags:** {video[4]}")   # Tags
-            st.write(f"**Added on:** {video[5]}")  # Added Date
-            if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
-                conn = sqlite3.connect(DB_FILE)
-                c = conn.cursor()
-                c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
-                          (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
-                conn.commit()
-                conn.close()
-                st.success("Video marked as watched!")
+        
+        # Display videos in a grid
+        st.markdown('<div class="video-grid">', unsafe_allow_html=True)
+        for i, video in enumerate(videos):
+            if i % 3 == 0:
+                st.markdown('<div class="video-row">', unsafe_allow_html=True)
+            st.markdown(f'''
+                <div class="video-card">
+                    <h3>{video[1]}</h3>
+                    <video width="100%" controls>
+                        <source src="{video[3]}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <p><strong>Level:</strong> {video[2]}</p>
+                    <p><strong>Tags:</strong> {video[4]}</p>
+                    <p><strong>Added on:</strong> {video[5]}</p>
+                </div>
+            ''', unsafe_allow_html=True)
+            if i % 3 == 2 or i == len(videos) - 1:
+                st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     elif page == "Progress":
         progress_page()
     
