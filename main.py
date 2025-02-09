@@ -33,6 +33,23 @@ st.markdown(
         border-radius: 10px;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
+    .calendar {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 10px;
+        margin-top: 20px;
+    }
+    .calendar-day {
+        padding: 10px;
+        text-align: center;
+        border-radius: 5px;
+        background-color: #f0f2f6;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .calendar-day.active {
+        background-color: #4CAF50;
+        color: white;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -193,17 +210,16 @@ def progress_page():
     calendar_dict = {date: minutes for date, minutes in calendar_data}
     
     # Display Calendar
-    st.write("| S | M | T | W | T | F | S |")
-    st.write("|---|---|---|---|---|---|---|")
+    st.markdown('<div class="calendar">', unsafe_allow_html=True)
+    st.markdown('<div class="calendar-day">S</div><div class="calendar-day">M</div><div class="calendar-day">T</div><div class="calendar-day">W</div><div class="calendar-day">T</div><div class="calendar-day">F</div><div class="calendar-day">S</div>', unsafe_allow_html=True)
     for week in range(0, 28, 7):
-        week_days = []
         for day in range(week, week + 7):
             date = f"2025-02-{day + 1:02d}"
             if date in calendar_dict:
-                week_days.append(f"{day + 1} ({calendar_dict[date] // 60}h {calendar_dict[date] % 60}m)")
+                st.markdown(f'<div class="calendar-day active">{day + 1}<br>{calendar_dict[date] // 60}h {calendar_dict[date] % 60}m</div>', unsafe_allow_html=True)
             else:
-                week_days.append(f"{day + 1}")
-        st.write(f"| {' | '.join(week_days)} |")
+                st.markdown(f'<div class="calendar-day">{day + 1}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # Edit Minutes Spent Section
     st.header("Edit Minutes Spent")
