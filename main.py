@@ -1,182 +1,192 @@
+# main.py
 import streamlit as st
-import pandas as pd
-import datetime
 import sqlite3
 import hashlib
-from datetime import timedelta
-import yaml
+import datetime
 import re
+from datetime import date
 
-# Initialize database
-def init_db():
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    
-    # Create users table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            is_admin BOOLEAN DEFAULT FALSE,
-            daily_target INTEGER DEFAULT 30
-        )
-    ''')
-    
-    # Create videos table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS videos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            youtube_id TEXT NOT NULL,
-            level TEXT NOT NULL,
-            tags TEXT,
-            duration INTEGER NOT NULL,
-            date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Create watch_history table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS watch_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            video_id INTEGER,
-            watched_date DATE,
-            FOREIGN KEY (user_id) REFERENCES users (id),
-            FOREIGN KEY (video_id) REFERENCES videos (id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+class Database:
+    def __init__(self, db_name='german_learning.db'):
+        self.db_name = db_name
 
-# Security functions
-def hash_password(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+    def get_connection(self):
+        return sqlite3.connect(self.db_name)
 
-def check_password(password, hashed_password):
-    return hash_password(password) == hashed_password
+    def init_db(self):
+        with self.get_connection() as conn:
+            c = conn.cursor()
+            
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT FALSE,
+                    daily_target INTEGER DEFAULT 30
+                )
+            ''')
+            
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS videos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    youtube_id TEXT NOT NULL,
+                    level TEXT NOT NULL,
+                    tags TEXT,
+                    duration INTEGER NOT NULL,
+                    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS watch_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    video_id INTEGER,
+                    watched_date DATE,
+                    FOREIGN KEY (user_id) REFERENCES users (id),
+                    FOREIGN KEY (video_id) REFERENCES videos (id)
+                )
+            ''')
+            
+            # Create admin user if it doesn't exist
+            c.execute("SELECT * FROM users WHERE username = 'admin'")
+            if not c.fetchone():
+                from services import UserService
+                UserService().create_user('admin', 'admin123', is_admin=True)
 
-# User management
-def create_user(username, password, is_admin=False):
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    try:
-        c.execute(
-            "INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
-            (username, hash_password(password), is_admin)
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        conn.close()
+class UserService:
+    def __init__(self):
+        self.db = Database()
 
-def verify_user(username, password):
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE username=?", (username,))
-    user = c.fetchone()
-    conn.close()
-    if user and check_password(password, user[2]):
-        return user
-    return None
+    def hash_password(self, password):
+        return hashlib.sha256(str.encode(password)).hexdigest()
 
-# Video management
-def extract_youtube_id(url):
-    pattern = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
-    match = re.search(pattern, url)
-    return match.group(1) if match else None
+    def create_user(self, username, password, is_admin=False):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            try:
+                c.execute(
+                    "INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)",
+                    (username, self.hash_password(password), is_admin)
+                )
+                return True
+            except sqlite3.IntegrityError:
+                return False
 
-def add_video(title, youtube_url, level, tags, duration):
-    youtube_id = extract_youtube_id(youtube_url)
-    if not youtube_id:
-        return False
+    def verify_user(self, username, password):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT * FROM users WHERE username=?", (username,))
+            user = c.fetchone()
+            if user and self.hash_password(password) == user[2]:
+                return user
+            return None
+
+    def update_daily_target(self, user_id, target):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("UPDATE users SET daily_target = ? WHERE id = ?", 
+                     (target, user_id))
+            return True
+
+    def get_daily_target(self, user_id):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("SELECT daily_target FROM users WHERE id = ?", (user_id,))
+            result = c.fetchone()
+            return result[0] if result else 30
+
+class VideoService:
+    def __init__(self):
+        self.db = Database()
+
+    def extract_youtube_id(self, url):
+        pattern = r'(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)/|.*[?&]v=)|youtu\.be/)([^"&?/\s]{11})'
+        match = re.search(pattern, url)
+        return match.group(1) if match else None
+
+    def add_video(self, title, youtube_url, level, tags, duration):
+        youtube_id = self.extract_youtube_id(youtube_url)
+        if not youtube_id:
+            return False
+            
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            try:
+                c.execute(
+                    "INSERT INTO videos (title, youtube_id, level, tags, duration) VALUES (?, ?, ?, ?, ?)",
+                    (title, youtube_id, level, tags, duration)
+                )
+                return True
+            except Exception:
+                return False
+
+    def get_videos(self, level=None, tag=None):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            
+            query = "SELECT * FROM videos"
+            params = []
+            
+            if level or tag:
+                query += " WHERE "
+                conditions = []
+                if level and level != "All":
+                    conditions.append("level = ?")
+                    params.append(level)
+                if tag:
+                    conditions.append("tags LIKE ?")
+                    params.append(f"%{tag}%")
+                if conditions:
+                    query += " AND ".join(conditions)
+            
+            c.execute(query, params)
+            return c.fetchall()
+
+class ProgressService:
+    def __init__(self):
+        self.db = Database()
+
+    def log_watch(self, user_id, video_id):
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            try:
+                c.execute(
+                    "INSERT INTO watch_history (user_id, video_id, watched_date) VALUES (?, ?, ?)",
+                    (user_id, video_id, date.today())
+                )
+                return True
+            except Exception:
+                return False
+
+    def get_daily_progress(self, user_id, date_=None):
+        if not date_:
+            date_ = date.today()
         
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    try:
-        c.execute(
-            "INSERT INTO videos (title, youtube_id, level, tags, duration) VALUES (?, ?, ?, ?, ?)",
-            (title, youtube_id, level, tags, duration)
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        st.error(f"Error adding video: {e}")
-        return False
-    finally:
-        conn.close()
+        with self.db.get_connection() as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT SUM(v.duration)
+                FROM watch_history wh
+                JOIN videos v ON wh.video_id = v.id
+                WHERE wh.user_id = ? AND wh.watched_date = ?
+            """, (user_id, date_))
+            
+            result = c.fetchone()[0]
+            return result if result else 0
 
-def get_videos(level=None, tag=None):
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    
-    query = "SELECT * FROM videos"
-    params = []
-    
-    if level or tag:
-        query += " WHERE "
-        conditions = []
-        if level:
-            conditions.append("level = ?")
-            params.append(level)
-        if tag:
-            conditions.append("tags LIKE ?")
-            params.append(f"%{tag}%")
-        query += " AND ".join(conditions)
-    
-    c.execute(query, params)
-    videos = c.fetchall()
-    conn.close()
-    return videos
-
-# Progress tracking
-def log_watch(user_id, video_id):
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    today = datetime.date.today()
-    try:
-        c.execute(
-            "INSERT INTO watch_history (user_id, video_id, watched_date) VALUES (?, ?, ?)",
-            (user_id, video_id, today)
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        st.error(f"Error logging watch: {e}")
-        return False
-    finally:
-        conn.close()
-
-def get_daily_progress(user_id, date=None):
-    if not date:
-        date = datetime.date.today()
-    
-    conn = sqlite3.connect('german_learning.db')
-    c = conn.cursor()
-    
-    c.execute("""
-        SELECT SUM(v.duration)
-        FROM watch_history wh
-        JOIN videos v ON wh.video_id = v.id
-        WHERE wh.user_id = ? AND wh.watched_date = ?
-    """, (user_id, date))
-    
-    result = c.fetchone()[0]
-    conn.close()
-    return result if result else 0
-
-# Streamlit UI
 def main():
     st.set_page_config(page_title="German Learning Platform", layout="wide")
     
-    # Initialize database
-    init_db()
+    # Initialize services
+    db = Database()
+    db.init_db()
+    user_service = UserService()
+    video_service = VideoService()
+    progress_service = ProgressService()
     
-    # Session state
     if 'user' not in st.session_state:
         st.session_state.user = None
     
@@ -189,7 +199,7 @@ def main():
             username = st.text_input("Username", key="login_username")
             password = st.text_input("Password", type="password", key="login_password")
             if st.button("Login"):
-                user = verify_user(username, password)
+                user = user_service.verify_user(username, password)
                 if user:
                     st.session_state.user = user
                     st.experimental_rerun()
@@ -201,7 +211,7 @@ def main():
             new_username = st.text_input("Username", key="register_username")
             new_password = st.text_input("Password", type="password", key="register_password")
             if st.button("Register"):
-                if create_user(new_username, new_password):
+                if user_service.create_user(new_username, new_password):
                     st.success("Registration successful! Please login.")
                 else:
                     st.error("Username already exists")
@@ -225,7 +235,7 @@ def main():
             duration = st.number_input("Duration (minutes)", min_value=1)
             
             if st.button("Add Video"):
-                if add_video(title, youtube_url, level, tags, duration):
+                if video_service.add_video(title, youtube_url, level, tags, duration):
                     st.success("Video added successfully!")
                 else:
                     st.error("Error adding video")
@@ -233,16 +243,14 @@ def main():
         elif page == "Browse Videos":
             st.header("Browse Videos")
             
-            # Filters
             col1, col2 = st.columns(2)
             with col1:
                 level_filter = st.selectbox("Filter by Level", ["All", "Beginner", "Intermediate", "Advanced"])
             with col2:
                 tag_filter = st.text_input("Filter by Tag")
             
-            # Get and display videos
-            videos = get_videos(
-                level=None if level_filter == "All" else level_filter,
+            videos = video_service.get_videos(
+                level=level_filter,
                 tag=tag_filter if tag_filter else None
             )
             
@@ -255,40 +263,27 @@ def main():
                         st.write(f"Tags: {video[4]}")
                     with col2:
                         if st.button("Mark as Watched", key=f"watch_{video[0]}"):
-                            if log_watch(st.session_state.user[0], video[0]):
+                            if progress_service.log_watch(st.session_state.user[0], video[0]):
                                 st.success("Progress logged!")
                     st.video(f"https://youtube.com/watch?v={video[2]}")
         
         elif page == "Progress Tracking":
             st.header("Progress Tracking")
             
-            # Get daily target
-            conn = sqlite3.connect('german_learning.db')
-            c = conn.cursor()
-            c.execute("SELECT daily_target FROM users WHERE id = ?", (st.session_state.user[0],))
-            daily_target = c.fetchone()[0]
-            conn.close()
-            
-            # Update daily target
+            daily_target = user_service.get_daily_target(st.session_state.user[0])
             new_target = st.number_input("Daily Target (minutes)", value=daily_target)
-            if new_target != daily_target:
-                conn = sqlite3.connect('german_learning.db')
-                c = conn.cursor()
-                c.execute("UPDATE users SET daily_target = ? WHERE id = ?", 
-                         (new_target, st.session_state.user[0]))
-                conn.commit()
-                conn.close()
             
-            # Show today's progress
-            today_progress = get_daily_progress(st.session_state.user[0])
+            if new_target != daily_target:
+                user_service.update_daily_target(st.session_state.user[0], new_target)
+            
+            today_progress = progress_service.get_daily_progress(st.session_state.user[0])
             progress_percentage = (today_progress / new_target) * 100 if new_target > 0 else 0
             
             st.metric(
-                label="Today's Progress",
-                value=f"{today_progress} minutes",
+                "Today's Progress",
+                f"{today_progress} minutes",
                 delta=f"{new_target - today_progress} minutes to goal"
             )
-            
             st.progress(min(progress_percentage / 100, 1.0))
 
 if __name__ == "__main__":
