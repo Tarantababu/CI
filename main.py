@@ -61,22 +61,21 @@ DB_FILE = "german_videos.db"
 
 # Initialize the database
 def init_db():
-    if not os.path.exists(DB_FILE):
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        
-        # Create tables if they don't exist
-        c.execute('''CREATE TABLE IF NOT EXISTS videos
-                     (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS user_progress
-                     (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS user_targets
-                     (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
-        
-        conn.commit()
-        conn.close()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # Create tables if they don't exist
+    c.execute('''CREATE TABLE IF NOT EXISTS videos
+                 (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS user_progress
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS user_targets
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
+    
+    conn.commit()
+    conn.close()
 
 # Fetch videos from the database
 def fetch_videos():
