@@ -18,13 +18,75 @@ def progress_page():
 
     # Overall Progression Section
     st.subheader("Overall progression")
-    st.write("You are currently in Level 1")
+    st.write("You are currently in **Level 1**")
 
-    col1, col2 = st.columns(2)
-    col1.metric("Total input time", "0 min")
-    col2.metric("0 hr", "50 hrs")
+    # Level Details
+    levels = [
+        {
+            "level": "Level 1",
+            "description": "Starting from zero.",
+            "hours": 0,
+            "known_words": 0,
+            "days_to_reach": 0
+        },
+        {
+            "level": "Level 2",
+            "description": "You know some common words.",
+            "hours": 50,
+            "known_words": 300,
+            "days_to_reach": 200
+        },
+        {
+            "level": "Level 3",
+            "description": "You can follow topics that are adapted for learners.",
+            "hours": 150,
+            "known_words": 1500,
+            "days_to_reach": 600
+        },
+        {
+            "level": "Level 4",
+            "description": "You can understand a person speaking to you patiently.",
+            "hours": 300,
+            "known_words": 3000,
+            "days_to_reach": 1200
+        },
+        {
+            "level": "Level 5",
+            "description": "You can understand native speakers speaking to you normally.",
+            "hours": 600,
+            "known_words": 5000,
+            "days_to_reach": 2400
+        },
+        {
+            "level": "Level 6",
+            "description": "You are comfortable with daily conversation.",
+            "hours": 1000,
+            "known_words": 7000,
+            "days_to_reach": 4000
+        },
+        {
+            "level": "Level 7",
+            "description": "You can use the language effectively for all practical purposes.",
+            "hours": 1500,
+            "known_words": 12000,
+            "days_to_reach": 6000
+        }
+    ]
 
-    st.metric("Hours to level 2", "50 hrs")
+    # Display Current Level
+    current_level = levels[0]  # Assuming the user is at Level 1
+    st.write(f"**{current_level['level']}**")
+    st.write(current_level["description"])
+    st.write(f"**Hours of input:** {current_level['hours']}")
+    st.write(f"**Known words:** {current_level['known_words']}")
+
+    # Display Next Level
+    if len(levels) > 1:
+        next_level = levels[1]
+        st.write(f"**Next Level:** {next_level['level']}")
+        st.write(next_level["description"])
+        st.write(f"**Hours to next level:** {next_level['hours'] - current_level['hours']}")
+        st.write(f"**You'll reach this level in {next_level['days_to_reach']} days based on your current daily goal.**")
 
     # Your Activity Section
     st.subheader("Your activity")
