@@ -2,21 +2,57 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 
+# Custom CSS for modern design
+st.markdown(
+    """
+    <style>
+    .stProgress > div > div > div > div {
+        background-color: #4CAF50;
+    }
+    .stButton > button {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 10px 20px;
+        border: none;
+        font-size: 16px;
+    }
+    .stButton > button:hover {
+        background-color: #45a049;
+    }
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: #4CAF50;
+    }
+    .stMetric {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    .stTable {
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 def progress_page():
     # Page Title
-    st.title("Daily Goal")
+    st.title("📊 Daily Goal")
 
     # Daily Goal Section
-    st.header("0/15 min")
+    st.header("🎯 0/15 min")
     st.markdown("---")
 
     # Watch Section
-    st.subheader("Watch")
+    st.subheader("📺 Watch")
     col1, col2, col3, col4 = st.columns(4)
-    col1.button("Series")
-    col2.button("Library")
-    col3.button("Progress")
-    col4.button("Try Premium")
+    col1.button("🎬 Series")
+    col2.button("📚 Library")
+    col3.button("📈 Progress")
+    col4.button("💎 Try Premium")
 
     # Fetch Daily Target from Database
     user_id = 1  # Replace with the actual user ID
@@ -27,9 +63,9 @@ def progress_page():
     conn.close()
 
     if target:
-        st.write(f"**Daily Target:** {target[0]} minutes")
+        st.write(f"**Daily Target:** 🕒 {target[0]} minutes")
     else:
-        st.write("**Daily Target:** Not set")
+        st.write("**Daily Target:** 🕒 Not set")
 
     # Fetch User Progress
     conn = sqlite3.connect('german_videos.db')
@@ -38,7 +74,13 @@ def progress_page():
                          (user_id, datetime.now().date())).fetchone()[0] or 0
     conn.close()
 
-    st.write(f"**Total minutes watched today:** {progress}")
+    # Progress Bar
+    if target:
+        progress_percent = min((progress / target[0]) * 100, 100)
+        st.progress(int(progress_percent))
+        st.write(f"**Total minutes watched today:** 🕒 {progress} / {target[0]} minutes")
+    else:
+        st.write(f"**Total minutes watched today:** 🕒 {progress} minutes")
 
     # Level Details
     levels = [
@@ -95,25 +137,25 @@ def progress_page():
 
     # Display Current Level
     current_level = levels[0]  # Assuming the user is at Level 1
-    st.write(f"**{current_level['level']}**")
+    st.subheader(f"🌟 {current_level['level']}")
     st.write(current_level["description"])
-    st.write(f"**Hours of input:** {current_level['hours']}")
-    st.write(f"**Known words:** {current_level['known_words']}")
+    st.metric("Hours of input", f"{current_level['hours']} hours")
+    st.metric("Known words", f"{current_level['known_words']} words")
 
     # Display Next Level
     if len(levels) > 1:
         next_level = levels[1]
-        st.write(f"**Next Level:** {next_level['level']}")
+        st.subheader(f"🚀 Next Level: {next_level['level']}")
         st.write(next_level["description"])
-        st.write(f"**Hours to next level:** {next_level['hours'] - current_level['hours']}")
+        st.metric("Hours to next level", f"{next_level['hours'] - current_level['hours']} hours")
         st.write(f"**You'll reach this level in {next_level['days_to_reach']} days based on your current daily goal.**")
 
     # Your Activity Section
-    st.subheader("Your activity")
+    st.subheader("📅 Your activity")
     st.write("Current streak: Reach a max streak of 7 by practicing every day.")
 
     # Calendar Section
-    st.subheader("February - 2025")
+    st.subheader("📅 February - 2025")
     st.write("5 M T W T F S")
 
     # Calendar Table
@@ -124,5 +166,5 @@ def progress_page():
     st.table(calendar_data)
 
     # Outside Hours Section
-    st.subheader("Outside hours")
+    st.subheader("🌍 Outside hours")
     st.write("hours outside the platform")
