@@ -1,8 +1,9 @@
 import streamlit as st
+import sqlite3
 
 def dashboard_page():
     # Page Title
-    st.title("Daily Goal")
+    st.title("German Learning Videos")
 
     # Search Section
     st.subheader("Search")
@@ -15,22 +16,25 @@ def dashboard_page():
 
     st.markdown("---")
 
-    # Video Library Section
-    st.subheader("2127 videos found (491 premium). Duration: 427h 14m.")
+    # Fetch Videos from Database
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    videos = c.execute("SELECT * FROM videos").fetchall()
+    conn.close()
 
-    # Example Videos
-    st.write("**The Reddit Advice Show with Andrea & Michelle En. 2**")
-    st.write("**The Reddit Advice Show with Andrea & Michelle En. 1**")
-    st.write("**Café Comments & Street Stall with the Arons of Coffee and Vinyl Tunes**")
-    st.write("**Tapovich El Callin de Leder Michelle-Star-Worthy Street Food?**")
-
-    # Premium Content Section
-    st.subheader("JUNG “ORPASS”")
-    st.write("Find Your Way: How to Use a Map and Compass Effectively")
-    st.write("[Admitted]")
-
-    st.subheader("FINALLY WELLER")
-    st.write("We Finally Met... In Sevillet")
-    st.write("[Admitted]")
-
-    st.subheader("INTO THE WILD")
+    # Display Videos
+    st.subheader(f"{len(videos)} videos found")
+    for video in videos:
+        st.subheader(video[1])  # Title
+        st.video(video[3])      # YouTube URL
+        st.write(f"**Level:** {video[2]}")  # Level
+        st.write(f"**Tags:** {video[4]}")   # Tags
+        st.write(f"**Added on:** {video[5]}")  # Added Date
+        if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
+            conn = sqlite3.connect('german_videos.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
+                      (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
+            conn.commit()
+            conn.close()
+            st.success("Video marked as watched!")
