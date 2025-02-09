@@ -1,21 +1,241 @@
 import streamlit as st
-from progress import progress_page
-from dashboard import dashboard_page
-from admin import admin_panel
+import sqlite3
+from datetime import datetime
 
-# Sidebar Navigation
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Dashboard", "Progress"])
+# Custom CSS for modern design
+st.markdown(
+    """
+    <style>
+    .stProgress > div > div > div > div {
+        background-color: #4CAF50;
+    }
+    .stButton > button {
+        background-color: #4CAF50;
+        color: white;
+        border-radius: 5px;
+        padding: 10px 20px;
+        border: none;
+        font-size: 16px;
+    }
+    .stButton > button:hover {
+        background-color: #45a049;
+    }
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: #4CAF50;
+    }
+    .stMetric {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    .stTable {
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# Admin Panel Checkbox
-is_admin = st.sidebar.checkbox("Admin Mode")
+# Initialize the database
+def init_db():
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    
+    # Create tables if they don't exist
+    c.execute('''CREATE TABLE IF NOT EXISTS videos
+                 (id INTEGER PRIMARY KEY, title TEXT, level TEXT, url TEXT, tags TEXT, added_date DATE)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS user_progress
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, video_id INTEGER, watched_date DATE, duration INTEGER)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS user_targets
+                 (id INTEGER PRIMARY KEY, user_id INTEGER, target_minutes INTEGER, set_date DATE)''')
+    
+    conn.commit()
+    conn.close()
 
-# Display the selected page
-if page == "Dashboard":
-    dashboard_page()
-elif page == "Progress":
-    progress_page()
+# Fetch videos from the database
+def fetch_videos():
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM videos")
+    videos = c.fetchall()
+    conn.close()
+    return videos
 
-# Show Admin Panel if in Admin Mode
-if is_admin:
-    admin_panel()
+# Add a new video to the database
+def add_video(title, level, url, tags):
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO videos (title, level, url, tags, added_date) VALUES (?, ?, ?, ?, ?)",
+              (title, level, url, tags, datetime.now().date()))
+    conn.commit()
+    conn.close()
+
+# Fetch user progress from the database
+def fetch_user_progress(user_id):
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ? AND watched_date = ?",
+              (user_id, datetime.now().date()))
+    progress = c.fetchone()[0] or 0
+    conn.close()
+    return progress
+
+# Set daily target for a user
+def set_daily_target(user_id, target_minutes):
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO user_targets (user_id, target_minutes, set_date) VALUES (?, ?, ?)",
+              (user_id, target_minutes, datetime.now().date()))
+    conn.commit()
+    conn.close()
+
+# Admin Panel
+def admin_panel():
+    st.sidebar.header("Admin Panel")
+    
+    # Add Video Section
+    st.sidebar.subheader("Add New Video")
+    title = st.sidebar.text_input("Title")
+    level = st.sidebar.selectbox("Level", ["Superbeginner", "Beginner", "Intermediate", "Advanced"])
+    url = st.sidebar.text_input("YouTube URL")
+    tags = st.sidebar.text_input("Tags (comma separated)")
+    add_button = st.sidebar.button("Add Video")
+    
+    if add_button:
+        if title and level and url:
+            add_video(title, level, url, tags)
+            st.sidebar.success("Video added successfully!")
+        else:
+            st.sidebar.error("Please fill in all fields.")
+    
+    # Set Daily Target Section
+    st.sidebar.subheader("Set Daily Target for Users")
+    user_id = st.sidebar.number_input("User ID", min_value=1, value=1)
+    target_minutes = st.sidebar.number_input("Daily Target (minutes)", min_value=1, value=30)
+    set_target_button = st.sidebar.button("Set Target")
+    
+    if set_target_button:
+        set_daily_target(user_id, target_minutes)
+        st.sidebar.success("Daily target set successfully!")
+
+# Progress Page
+def progress_page():
+    st.title("📊 Daily Goal")
+    
+    # Daily Goal Section
+    st.header("🎯 0/15 min")
+    st.markdown("---")
+    
+    # Watch Section
+    st.subheader("📺 Watch")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.button("🎬 Series")
+    col2.button("📚 Library")
+    col3.button("📈 Progress")
+    col4.button("💎 Try Premium")
+    
+    # Fetch Daily Target
+    user_id = 1  # Replace with the actual user ID
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    target = c.execute("SELECT target_minutes FROM user_targets WHERE user_id = ? ORDER BY set_date DESC LIMIT 1",
+                       (user_id,)).fetchone()
+    conn.close()
+    
+    if target:
+        st.write(f"**Daily Target:** 🕒 {target[0]} minutes")
+    else:
+        st.write("**Daily Target:** 🕒 Not set")
+    
+    # Fetch User Progress
+    progress = fetch_user_progress(user_id)
+    st.write(f"**Total minutes watched today:** 🕒 {progress} minutes")
+    
+    # Level Details
+    levels = [
+        {"level": "Level 1", "description": "Starting from zero.", "hours": 0, "known_words": 0, "days_to_reach": 0},
+        {"level": "Level 2", "description": "You know some common words.", "hours": 50, "known_words": 300, "days_to_reach": 200},
+        {"level": "Level 3", "description": "You can follow topics that are adapted for learners.", "hours": 150, "known_words": 1500, "days_to_reach": 600},
+        {"level": "Level 4", "description": "You can understand a person speaking to you patiently.", "hours": 300, "known_words": 3000, "days_to_reach": 1200},
+        {"level": "Level 5", "description": "You can understand native speakers speaking to you normally.", "hours": 600, "known_words": 5000, "days_to_reach": 2400},
+        {"level": "Level 6", "description": "You are comfortable with daily conversation.", "hours": 1000, "known_words": 7000, "days_to_reach": 4000},
+        {"level": "Level 7", "description": "You can use the language effectively for all practical purposes.", "hours": 1500, "known_words": 12000, "days_to_reach": 6000}
+    ]
+    
+    # Display Current Level
+    current_level = levels[0]  # Assuming the user is at Level 1
+    st.subheader(f"🌟 {current_level['level']}")
+    st.write(current_level["description"])
+    st.metric("Hours of input", f"{current_level['hours']} hours")
+    st.metric("Known words", f"{current_level['known_words']} words")
+    
+    # Display Next Level
+    if len(levels) > 1:
+        next_level = levels[1]
+        st.subheader(f"🚀 Next Level: {next_level['level']}")
+        st.write(next_level["description"])
+        st.metric("Hours to next level", f"{next_level['hours'] - current_level['hours']} hours")
+        st.write(f"**You'll reach this level in {next_level['days_to_reach']} days based on your current daily goal.**")
+    
+    # Your Activity Section
+    st.subheader("📅 Your activity")
+    st.write("Current streak: Reach a max streak of 7 by practicing every day.")
+    
+    # Calendar Section
+    st.subheader("📅 February - 2025")
+    st.write("5 M T W T F S")
+    
+    # Calendar Table
+    calendar_data = {
+        "Week in a row": ["10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22"],
+        " ": ["23", "24", "25", "26", "27", "28", "", "", "", "", "", ""]
+    }
+    st.table(calendar_data)
+    
+    # Outside Hours Section
+    st.subheader("🌍 Outside hours")
+    st.write("hours outside the platform")
+
+# Main App
+def main():
+    # Initialize the database
+    init_db()
+    
+    # Sidebar Navigation
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("Go to", ["Dashboard", "Progress"])
+    
+    # Admin Panel Checkbox
+    is_admin = st.sidebar.checkbox("Admin Mode")
+    
+    # Display the selected page
+    if page == "Dashboard":
+        st.title("German Learning Videos")
+        videos = fetch_videos()
+        for video in videos:
+            st.subheader(video[1])  # Title
+            st.video(video[3])      # YouTube URL
+            st.write(f"**Level:** {video[2]}")  # Level
+            st.write(f"**Tags:** {video[4]}")   # Tags
+            st.write(f"**Added on:** {video[5]}")  # Added Date
+            if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
+                conn = sqlite3.connect('german_videos.db')
+                c = conn.cursor()
+                c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
+                          (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
+                conn.commit()
+                conn.close()
+                st.success("Video marked as watched!")
+    elif page == "Progress":
+        progress_page()
+    
+    # Show Admin Panel if in Admin Mode
+    if is_admin:
+        admin_panel()
+
+if __name__ == "__main__":
+    main()
