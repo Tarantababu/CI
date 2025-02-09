@@ -1,6 +1,6 @@
 import streamlit as st
-from datetime import datetime
 import sqlite3
+from datetime import datetime
 
 def progress_page():
     # Page Title
@@ -18,10 +18,6 @@ def progress_page():
     col3.button("Progress")
     col4.button("Try Premium")
 
-    # Overall Progression Section
-    st.subheader("Overall progression")
-    st.write("You are currently in **Level 1**")
-
     # Fetch Daily Target from Database
     user_id = 1  # Replace with the actual user ID
     conn = sqlite3.connect('german_videos.db')
@@ -34,6 +30,15 @@ def progress_page():
         st.write(f"**Daily Target:** {target[0]} minutes")
     else:
         st.write("**Daily Target:** Not set")
+
+    # Fetch User Progress
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    progress = c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ? AND watched_date = ?",
+                         (user_id, datetime.now().date())).fetchone()[0] or 0
+    conn.close()
+
+    st.write(f"**Total minutes watched today:** {progress}")
 
     # Level Details
     levels = [
