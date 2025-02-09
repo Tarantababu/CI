@@ -154,11 +154,11 @@ def progress_page():
     st.write(f"You are currently in **{current_level['level']}**")
     
     col1, col2 = st.columns(2)
-    col1.metric("Total input time", f"{int(progress_hours)} hr")
+    col1.metric("Total input time", f"{progress_hours:.2f} hr")
     next_level = levels[levels.index(current_level) + 1] if levels.index(current_level) < len(levels) - 1 else None
     if next_level:
         hours_to_next_level = next_level["hours"] - progress_hours
-        col2.metric("Hours to next level", f"{int(hours_to_next_level)} hr")
+        col2.metric("Hours to next level", f"{hours_to_next_level:.2f} hr")
     else:
         col2.metric("Hours to next level", "Max level reached")
     
@@ -170,7 +170,7 @@ def progress_page():
     # Display Current Level
     st.subheader(f"🌟 {current_level['level']}")
     st.write(current_level["description"])
-    st.metric("Hours of input", f"{int(progress_hours)} hours")
+    st.metric("Hours of input", f"{progress_hours:.2f} hours")
     st.metric("Known words", f"{current_level['known_words']} words")
     
     # Display Next Level
