@@ -1,6 +1,2 @@
 streamlit
 pandas
-sqlite3
-hashlib
-datetime
-re
