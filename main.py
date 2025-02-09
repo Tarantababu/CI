@@ -78,8 +78,8 @@ def add_video(title, level, url, tags):
 def fetch_user_progress(user_id):
     conn = sqlite3.connect('german_videos.db')
     c = conn.cursor()
-    c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ? AND watched_date = ?",
-              (user_id, datetime.now().date()))
+    c.execute("SELECT SUM(duration) FROM user_progress WHERE user_id = ?",
+              (user_id,))
     progress = c.fetchone()[0] or 0
     conn.close()
     return progress
@@ -103,14 +103,24 @@ def set_daily_target(user_id, target_minutes):
     conn.commit()
     conn.close()
 
-# Update hours spent
-def update_hours_spent(user_id, hours_spent):
+# Update minutes spent
+def update_minutes_spent(user_id, minutes_spent):
     conn = sqlite3.connect('german_videos.db')
     c = conn.cursor()
     c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
-              (user_id, 0, datetime.now().date(), hours_spent * 60))  # Convert hours to minutes
+              (user_id, 0, datetime.now().date(), minutes_spent))
     conn.commit()
     conn.close()
+
+# Fetch calendar data
+def fetch_calendar_data(user_id):
+    conn = sqlite3.connect('german_videos.db')
+    c = conn.cursor()
+    c.execute("SELECT watched_date, SUM(duration) FROM user_progress WHERE user_id = ? GROUP BY watched_date",
+              (user_id,))
+    calendar_data = c.fetchall()
+    conn.close()
+    return calendar_data
 
 # Progress Page
 def progress_page():
@@ -122,40 +132,51 @@ def progress_page():
     progress_hours = progress_minutes / 60
     daily_target = fetch_daily_target(user_id)
     
+    # Level Details
+    levels = [
+        {"level": "Level 1", "description": "Starting from zero.", "hours": 0, "known_words": 0},
+        {"level": "Level 2", "description": "You know some common words.", "hours": 50, "known_words": 300},
+        {"level": "Level 3", "description": "You can follow topics that are adapted for learners.", "hours": 150, "known_words": 1500},
+        {"level": "Level 4", "description": "You can understand a person speaking to you patiently.", "hours": 300, "known_words": 3000},
+        {"level": "Level 5", "description": "You can understand native speakers speaking to you normally.", "hours": 600, "known_words": 5000},
+        {"level": "Level 6", "description": "You are comfortable with daily conversation.", "hours": 1000, "known_words": 7000},
+        {"level": "Level 7", "description": "You can use the language effectively for all practical purposes.", "hours": 1500, "known_words": 12000}
+    ]
+    
+    # Determine current level
+    current_level = levels[0]
+    for level in levels:
+        if progress_hours >= level["hours"]:
+            current_level = level
+    
     # Overall Progression Section
     st.header("Overall progression")
-    st.write("You are currently in **Level 1**")
+    st.write(f"You are currently in **{current_level['level']}**")
     
     col1, col2 = st.columns(2)
     col1.metric("Total input time", f"{int(progress_hours)} hr")
-    col2.metric("Hours to level 2", f"{50 - int(progress_hours)} hr")
+    next_level = levels[levels.index(current_level) + 1] if levels.index(current_level) < len(levels) - 1 else None
+    if next_level:
+        hours_to_next_level = next_level["hours"] - progress_hours
+        col2.metric("Hours to next level", f"{int(hours_to_next_level)} hr")
+    else:
+        col2.metric("Hours to next level", "Max level reached")
     
-    # Level Details
-    levels = [
-        {"level": "Level 1", "description": "Starting from zero.", "hours": 0, "known_words": 0, "days_to_reach": 0},
-        {"level": "Level 2", "description": "You know some common words.", "hours": 50, "known_words": 300, "days_to_reach": 200},
-        {"level": "Level 3", "description": "You can follow topics that are adapted for learners.", "hours": 150, "known_words": 1500, "days_to_reach": 600},
-        {"level": "Level 4", "description": "You can understand a person speaking to you patiently.", "hours": 300, "known_words": 3000, "days_to_reach": 1200},
-        {"level": "Level 5", "description": "You can understand native speakers speaking to you normally.", "hours": 600, "known_words": 5000, "days_to_reach": 2400},
-        {"level": "Level 6", "description": "You are comfortable with daily conversation.", "hours": 1000, "known_words": 7000, "days_to_reach": 4000},
-        {"level": "Level 7", "description": "You can use the language effectively for all practical purposes.", "hours": 1500, "known_words": 12000, "days_to_reach": 6000}
-    ]
+    # Progress Bar
+    if next_level:
+        progress_percent = (progress_hours - current_level["hours"]) / (next_level["hours"] - current_level["hours"]) * 100
+        st.progress(int(progress_percent))
     
     # Display Current Level
-    current_level = levels[0]  # Assuming the user is at Level 1
     st.subheader(f"🌟 {current_level['level']}")
     st.write(current_level["description"])
     st.metric("Hours of input", f"{int(progress_hours)} hours")
     st.metric("Known words", f"{current_level['known_words']} words")
     
     # Display Next Level
-    if len(levels) > 1:
-        next_level = levels[1]
+    if next_level:
         st.subheader(f"🚀 Next Level: {next_level['level']}")
         st.write(next_level["description"])
-        hours_to_next_level = next_level["hours"] - progress_hours
-        
-        # Calculate days to reach the next level
         if daily_target:
             days_to_next_level = hours_to_next_level / (daily_target / 60)  # Convert target minutes to hours
             st.write(f"**You'll reach this level in {int(days_to_next_level)} days based on your current daily goal.**")
@@ -168,23 +189,28 @@ def progress_page():
     
     # Calendar Section
     st.header("February - 2025")
-    calendar_data = {
-        "S": ["2", "9", "16", "23"],
-        "M": ["3", "10", "17", "24"],
-        "T": ["4", "11", "18", "25"],
-        "W": ["5", "12", "19", "26"],
-        "T": ["6", "13", "20", "27"],
-        "F": ["7", "14", "21", "28"],
-        "S": ["8", "15", "22", ""]
-    }
-    st.table(calendar_data)
+    calendar_data = fetch_calendar_data(user_id)
+    calendar_dict = {date: minutes for date, minutes in calendar_data}
     
-    # Edit Hours Spent Section
-    st.header("Edit Hours Spent")
-    hours_spent = st.number_input("Enter hours spent today", min_value=0, value=0)
-    if st.button("Update Hours Spent"):
-        update_hours_spent(user_id, hours_spent)
-        st.success("Hours spent updated successfully!")
+    # Display Calendar
+    st.write("| S | M | T | W | T | F | S |")
+    st.write("|---|---|---|---|---|---|---|")
+    for week in range(0, 28, 7):
+        week_days = []
+        for day in range(week, week + 7):
+            date = f"2025-02-{day + 1:02d}"
+            if date in calendar_dict:
+                week_days.append(f"{day + 1} ({calendar_dict[date] // 60}h {calendar_dict[date] % 60}m)")
+            else:
+                week_days.append(f"{day + 1}")
+        st.write(f"| {' | '.join(week_days)} |")
+    
+    # Edit Minutes Spent Section
+    st.header("Edit Minutes Spent")
+    minutes_spent = st.number_input("Enter minutes spent today", min_value=0, value=0)
+    if st.button("Update Minutes Spent"):
+        update_minutes_spent(user_id, minutes_spent)
+        st.success("Minutes spent updated successfully!")
 
 # Admin Panel
 def admin_panel():
