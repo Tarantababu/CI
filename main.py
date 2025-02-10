@@ -313,18 +313,20 @@ def main():
         for i, video in enumerate(videos):
             if i % 3 == 0:
                 st.markdown('<div class="video-row">', unsafe_allow_html=True)
-            st.markdown(f'''
-                <div class="video-card">
-                    <h3>{video[1]}</h3>
-                    <video width="100%" controls>
-                        <source src="{video[3]}" type="video/mp4">
-                        Your browser does not support the video tag.
-                    </video>
-                    <p><strong>Level:</strong> {video[2]}</p>
-                    <p><strong>Tags:</strong> {video[4]}</p>
-                    <p><strong>Added on:</strong> {video[5]}</p>
-                </div>
-            ''', unsafe_allow_html=True)
+            with st.container():
+                st.subheader(video[1])  # Title
+                st.video(video[3])      # YouTube URL
+                st.write(f"**Level:** {video[2]}")  # Level
+                st.write(f"**Tags:** {video[4]}")   # Tags
+                st.write(f"**Added on:** {video[5]}")  # Added Date
+                if st.button(f"Mark as Watched - {video[1]}", key=video[0]):
+                    conn = sqlite3.connect(DB_FILE)
+                    c = conn.cursor()
+                    c.execute("INSERT INTO user_progress (user_id, video_id, watched_date, duration) VALUES (?, ?, ?, ?)",
+                              (1, video[0], datetime.now().date(), 10))  # Assuming 10 minutes per video
+                    conn.commit()
+                    conn.close()
+                    st.success("Video marked as watched!")
             if i % 3 == 2 or i == len(videos) - 1:
                 st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
